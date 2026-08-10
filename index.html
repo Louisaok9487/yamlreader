@@ -1,0 +1,1275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>YAML Studio — Reader · Beautifier · Formatter</title>
+<style>
+:root{
+  --bg:#0f1419; --panel:#161d24; --panel-2:#1c242c; --border:#2a353f;
+  --text:#e7edf3; --muted:#8ea1b2; --accent:#5fd0c1; --accent-2:#7aa2ff;
+  --warn:#f5b942; --danger:#ff6b6b; --ok:#63e6a0;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Arial, sans-serif;
+  --key: #7aa2ff; --str:#a6e3a1; --num:#f5b942; --bool:#f78fb3; --nul:#8ea1b2; --com:#5c6b78;
+}
+[data-theme="light"]{
+  --bg:#f4f6f8; --panel:#ffffff; --panel-2:#f0f3f6; --border:#dde3e9;
+  --text:#1b2530; --muted:#5b6b78; --accent:#0e8a7a; --accent-2:#2f5fd0;
+  --warn:#a5680b; --danger:#c8352c; --ok:#1a8a4f;
+  --key:#2f5fd0; --str:#1a8a4f; --num:#a5680b; --bool:#b0356b; --nul:#5b6b78; --com:#93a1ac;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+  display:flex; flex-direction:column; min-height:100vh;
+}
+header{
+  display:flex; align-items:center; gap:14px; padding:12px 18px;
+  border-bottom:1px solid var(--border); background:var(--panel);
+  position:sticky; top:0; z-index:20;
+}
+header .logo{
+  width:34px; height:34px; border-radius:9px;
+  background:linear-gradient(135deg, var(--accent), var(--accent-2));
+  display:flex; align-items:center; justify-content:center; font-weight:800; color:#0b1116; flex-shrink:0;
+}
+header h1{font-size:16px; margin:0; font-weight:700; letter-spacing:.2px;}
+header .sub{font-size:12px; color:var(--muted); margin-top:1px;}
+header .titlewrap{display:flex; flex-direction:column;}
+.spacer{flex:1;}
+.iconbtn{
+  background:var(--panel-2); border:1px solid var(--border); color:var(--text);
+  border-radius:8px; padding:7px 12px; cursor:pointer; font-size:13px; display:flex; gap:6px; align-items:center;
+  transition:.15s;
+}
+.iconbtn:hover{border-color:var(--accent); color:var(--accent);}
+.iconbtn.primary{background:var(--accent); border-color:var(--accent); color:#04211c; font-weight:700;}
+.iconbtn.primary:hover{filter:brightness(1.08); color:#04211c;}
+main{
+  flex:1; display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--border);
+  min-height:0;
+}
+@media(max-width:920px){ main{grid-template-columns:1fr;} }
+.pane{ background:var(--bg); display:flex; flex-direction:column; min-height:0; }
+.pane-head{
+  display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border);
+  background:var(--panel); flex-wrap:wrap;
+}
+.pane-head .title{font-weight:700; font-size:13px; color:var(--text); margin-right:auto;}
+.pane-body{flex:1; min-height:0; position:relative; display:flex; flex-direction:column;}
+select, .num-input{
+  background:var(--panel-2); color:var(--text); border:1px solid var(--border); border-radius:6px;
+  padding:5px 8px; font-size:12px;
+}
+label.opt{font-size:12px; color:var(--muted); display:flex; align-items:center; gap:5px; user-select:none;}
+
+/* --- Input pane --- */
+.dropzone{
+  margin:10px 12px 0 12px; border:1.5px dashed var(--border); border-radius:10px;
+  padding:10px; text-align:center; cursor:pointer; transition:.15s; flex-shrink:0;
+}
+.dropzone:hover, .dropzone.dragover{border-color:var(--accent); background:rgba(95,208,193,.06);}
+.dz-inner{display:flex; align-items:center; justify-content:center; gap:10px; padding:6px;}
+.dz-icon{font-size:20px; color:var(--accent);}
+.dz-text{font-size:12px; color:var(--muted); text-align:left; line-height:1.4;}
+
+.editor-wrap{flex:1; display:flex; min-height:0; margin:10px 12px; border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--panel-2);}
+.gutter{
+  padding:12px 8px; text-align:right; color:var(--com); font-family:var(--mono); font-size:12.5px;
+  line-height:1.55; background:var(--panel); border-right:1px solid var(--border); user-select:none;
+  overflow:hidden; white-space:pre;
+}
+.editor{
+  flex:1; resize:none; border:none; outline:none; background:transparent; color:var(--text);
+  font-family:var(--mono); font-size:12.5px; line-height:1.55; padding:12px; tab-size:2;
+  white-space:pre; overflow:auto;
+}
+.statusbar{
+  padding:7px 14px; font-size:11.5px; color:var(--muted); border-top:1px solid var(--border); background:var(--panel);
+  flex-shrink:0;
+}
+.statusbar.err{color:var(--danger);}
+.statusbar.ok{color:var(--ok);}
+
+/* --- Tabs --- */
+.tabs{display:flex; gap:4px;}
+.tab{
+  background:transparent; border:1px solid transparent; color:var(--muted); font-size:12.5px;
+  padding:6px 11px; border-radius:7px; cursor:pointer; font-weight:600;
+}
+.tab:hover{color:var(--text);}
+.tab.active{background:var(--panel-2); border-color:var(--border); color:var(--accent);}
+
+/* --- Views --- */
+.view{display:none; flex:1; min-height:0; overflow:auto; padding:12px 14px; font-family:var(--mono); font-size:12.5px;}
+.view.active{display:block;}
+#view-beautified pre, #view-json pre{margin:0; white-space:pre-wrap; word-break:break-word; line-height:1.6;}
+#view-stats{font-family:var(--sans);}
+
+/* --- Tree view --- */
+.tnode{margin-left:18px;}
+.tnode.root{margin-left:0;}
+.trow{display:flex; align-items:flex-start; gap:6px; padding:2px 4px; border-radius:5px; cursor:default;}
+.trow:hover{background:rgba(127,127,127,.08);}
+.tcaret{
+  width:16px; flex-shrink:0; color:var(--muted); cursor:pointer; user-select:none; text-align:center; font-size:10px;
+  padding-top:3px;
+}
+.tcaret.leaf{visibility:hidden;}
+.tkey{color:var(--key); font-weight:700;}
+.tcolon{color:var(--muted);}
+.tval-str{color:var(--str);}
+.tval-num{color:var(--num);}
+.tval-bool{color:var(--bool); font-weight:600;}
+.tval-null{color:var(--nul); font-style:italic;}
+.ttype{color:var(--com); font-size:10.5px; margin-left:6px;}
+.tchildren{display:block;}
+.tchildren.collapsed{display:none;}
+.thighlight{background:rgba(245,185,66,.35); border-radius:3px;}
+
+/* --- Syntax highlight for beautified/output --- */
+.y-key{color:var(--key);}
+.y-str{color:var(--str);}
+.y-num{color:var(--num);}
+.y-bool{color:var(--bool);}
+.y-null{color:var(--nul);}
+.y-com{color:var(--com); font-style:italic;}
+.y-dash{color:var(--accent-2); font-weight:700;}
+.y-anchor{color:var(--accent);}
+
+/* --- Stats --- */
+.stat-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; margin-bottom:16px;}
+.stat-card{background:var(--panel-2); border:1px solid var(--border); border-radius:10px; padding:12px;}
+.stat-num{font-size:22px; font-weight:800; color:var(--accent);}
+.stat-label{font-size:11.5px; color:var(--muted); margin-top:2px;}
+.err-list{list-style:none; margin:0; padding:0;}
+.err-list li{padding:8px 10px; border-left:3px solid var(--danger); background:rgba(255,107,107,.08); border-radius:0 6px 6px 0; margin-bottom:6px; font-size:12.5px;}
+
+.badge{font-size:11.5px; padding:4px 10px; border-radius:20px; background:var(--panel-2); border:1px solid var(--border); color:var(--muted); font-weight:600;}
+.badge.ok{color:var(--ok); border-color:var(--ok);}
+.badge.err{color:var(--danger); border-color:var(--danger);}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Y</div>
+  <div class="titlewrap">
+    <h1>YAML Studio</h1>
+    <div class="sub">Reader · Beautifier · Formatter — 100% local, zero external requests</div>
+  </div>
+  <div class="spacer"></div>
+  <button class="iconbtn" id="themeBtn" title="Toggle theme">🌓 Theme</button>
+</header>
+<main id="mainGrid">
+  <!-- LEFT PANE: INPUT -->
+  <section class="pane">
+    <div class="pane-head">
+      <span class="title">📥 Source</span>
+      <button class="iconbtn" id="btnOpenFile">📂 Open file</button>
+      <button class="iconbtn" id="btnSample">✨ Load sample</button>
+      <button class="iconbtn" id="btnClear">🗑 Clear</button>
+      <input type="file" id="fileInput" accept=".yaml,.yml,.txt,.json" style="display:none">
+    </div>
+    <div class="pane-body">
+      <div id="dropZone" class="dropzone">
+        <div class="dz-inner">
+          <div class="dz-icon">⇪</div>
+          <div class="dz-text">Drag &amp; drop a <b>.yaml</b> / <b>.yml</b> file here<br>or click to browse — or just paste below</div>
+        </div>
+      </div>
+      <div class="editor-wrap">
+        <div class="gutter" id="gutter">1</div>
+        <textarea id="srcInput" class="editor" spellcheck="false" placeholder="Paste your YAML here..."></textarea>
+      </div>
+      <div class="statusbar" id="srcStatus">Ready. Load a file or paste YAML to begin.</div>
+    </div>
+  </section>
+
+  <!-- RIGHT PANE: OUTPUT -->
+  <section class="pane">
+    <div class="pane-head">
+      <span class="title">📤 Output</span>
+      <div class="tabs" id="tabs">
+        <button class="tab active" data-tab="tree">🌳 Tree</button>
+        <button class="tab" data-tab="beautified">✨ Beautified</button>
+        <button class="tab" data-tab="json">{ } JSON</button>
+        <button class="tab" data-tab="stats">📊 Stats</button>
+      </div>
+    </div>
+    <div class="pane-head" id="optionsBar">
+      <label class="opt">Indent
+        <select id="optIndent">
+          <option value="2">2 spaces</option>
+          <option value="4">4 spaces</option>
+          <option value="tab">Tab</option>
+        </select>
+      </label>
+      <label class="opt"><input type="checkbox" id="optSortKeys"> Sort keys</label>
+      <label class="opt"><input type="checkbox" id="optQuoteStrings"> Quote all strings</label>
+      <label class="opt"><input type="checkbox" id="optFlowArrays"> Flow style short arrays</label>
+      <div class="spacer"></div>
+      <button class="iconbtn" id="btnExpandAll">⤢ Expand all</button>
+      <button class="iconbtn" id="btnCollapseAll">⤡ Collapse all</button>
+      <input type="text" id="treeSearch" placeholder="🔍 Search keys/values…" class="num-input" style="min-width:160px;">
+    </div>
+    <div class="pane-body">
+      <div id="view-tree" class="view active"></div>
+      <div id="view-beautified" class="view"></div>
+      <div id="view-json" class="view"></div>
+      <div id="view-stats" class="view"></div>
+    </div>
+    <div class="pane-head" id="actionBar">
+      <button class="iconbtn primary" id="btnCopy">📋 Copy output</button>
+      <button class="iconbtn" id="btnDownloadYaml">⬇ Download .yaml</button>
+      <button class="iconbtn" id="btnDownloadJson">⬇ Download .json</button>
+      <div class="spacer"></div>
+      <span id="validationBadge" class="badge">—</span>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ============================================================================
+   YAML STUDIO — a self-contained YAML reader / beautifier / formatter.
+   No external libraries or network requests. The parser + serializer below
+   implement a practical subset of YAML 1.1/1.2 sufficient for real-world
+   config files: nested mappings & sequences, flow collections {}/[],
+   quoted & plain scalars, comments, block scalars (| and >), anchors/aliases,
+   and basic multi-document markers.
+   ============================================================================ */
+
+/* ---------------------------- Custom error type ---------------------------- */
+class YamlError extends Error{
+  constructor(message, line){
+    super(message);
+    this.name = 'YamlError';
+    this.line = line; // 1-based line number, or null
+  }
+}
+
+/* ---------------------------- Scalar helpers ---------------------------- */
+
+// Strip a trailing " # comment" from a plain (unquoted) scalar fragment,
+// respecting single/double quotes and flow brackets so we don't cut inside them.
+function stripTrailingComment(s){
+  let inSingle=false, inDouble=false, depth=0;
+  for(let i=0;i<s.length;i++){
+    const c = s[i];
+    if(inSingle){ if(c==="'"){ if(s[i+1]==="'"){i++; continue;} inSingle=false; } continue; }
+    if(inDouble){ if(c==='\\'){ i++; continue; } if(c==='"'){ inDouble=false; } continue; }
+    if(c==="'"){ inSingle=true; continue; }
+    if(c==='"'){ inDouble=true; continue; }
+    if(c==='{'||c==='['){ depth++; continue; }
+    if(c==='}'||c===']'){ depth--; continue; }
+    if(c==='#' && depth===0 && (i===0 || /\s/.test(s[i-1]))){
+      return s.slice(0,i);
+    }
+  }
+  return s;
+}
+
+function unescapeDoubleQuoted(inner){
+  let out='';
+  for(let i=0;i<inner.length;i++){
+    const c = inner[i];
+    if(c==='\\'){
+      const n = inner[i+1];
+      const map = {n:'\n', t:'\t', r:'\r', '"':'"', '\\':'\\', '0':'\0', b:'\b', f:'\f', '/':'/'};
+      if(n in map){ out += map[n]; i++; }
+      else if(n==='u'){ const hex = inner.slice(i+2,i+6); out += String.fromCharCode(parseInt(hex,16)); i+=5; }
+      else if(n==='x'){ const hex = inner.slice(i+2,i+4); out += String.fromCharCode(parseInt(hex,16)); i+=3; }
+      else { out += n; i++; }
+    } else out += c;
+  }
+  return out;
+}
+
+// Parse a plain/quoted scalar string into a JS value (string, number, bool, null).
+function parseScalar(raw){
+  let s = raw.trim();
+  if(s === '') return null;
+  if(s[0] === '"' && s[s.length-1] === '"' && s.length>=2){
+    return unescapeDoubleQuoted(s.slice(1,-1));
+  }
+  if(s[0] === "'" && s[s.length-1] === "'" && s.length>=2){
+    return s.slice(1,-1).replace(/''/g, "'");
+  }
+  const low = s.toLowerCase();
+  if(s === '~' || low === 'null' || s === '') return null;
+  if(low === 'true' || low === 'yes' || low === 'on') return true;
+  if(low === 'false' || low === 'no' || low === 'off') return false;
+  if(/^[-+]?\d+$/.test(s)) return parseInt(s,10);
+  if(/^0x[0-9a-fA-F]+$/.test(s)) return parseInt(s,16);
+  if(/^0o[0-7]+$/.test(s)) return parseInt(s.slice(2),8);
+  if(/^[-+]?(\d+\.\d*|\.\d+|\d+)([eE][-+]?\d+)?$/.test(s) && /[.eE]/.test(s)) return parseFloat(s);
+  if(low === '.inf' || low === '+.inf') return Infinity;
+  if(low === '-.inf') return -Infinity;
+  if(low === '.nan') return NaN;
+  // strip matching surrounding quotes not caught above, else return as-is
+  return s;
+}
+
+function parseKeyToken(raw){
+  const s = raw.trim();
+  if((s[0]==='"' && s[s.length-1]==='"') || (s[0]==="'" && s[s.length-1]==="'")){
+    const v = parseScalar(s);
+    return String(v);
+  }
+  return s;
+}
+
+/* --------------------- Flow collection parser: {} and [] --------------------- */
+class FlowParser{
+  constructor(str){ this.s = str; this.i = 0; this.n = str.length; }
+  skipWs(){ while(this.i<this.n && /[ \t]/.test(this.s[this.i])) this.i++; }
+  peek(){ return this.s[this.i]; }
+  error(msg){ throw new YamlError('Flow syntax error: '+msg, null); }
+
+  parseValue(){
+    this.skipWs();
+    const c = this.peek();
+    if(c === '{') return this.parseMap();
+    if(c === '[') return this.parseSeq();
+    if(c === '"') return this.parseDouble();
+    if(c === "'") return this.parseSingle();
+    return this.parseBareScalar();
+  }
+  parseMap(){
+    this.i++; // {
+    const obj = {};
+    this.skipWs();
+    if(this.peek() === '}'){ this.i++; return obj; }
+    while(true){
+      this.skipWs();
+      let key;
+      if(this.peek() === '"'){ key = this.parseDouble(); }
+      else if(this.peek() === "'"){ key = this.parseSingle(); }
+      else { key = this.parseBareUntil([':',',','}']); key = key.trim(); }
+      this.skipWs();
+      let val = null;
+      if(this.peek() === ':'){
+        this.i++; this.skipWs();
+        if(this.peek() === ',' || this.peek() === '}' ){ val = null; }
+        else val = this.parseValue();
+      }
+      obj[key] = val;
+      this.skipWs();
+      if(this.peek() === ','){ this.i++; continue; }
+      if(this.peek() === '}'){ this.i++; break; }
+      break;
+    }
+    return obj;
+  }
+  parseSeq(){
+    this.i++; // [
+    const arr = [];
+    this.skipWs();
+    if(this.peek() === ']'){ this.i++; return arr; }
+    while(true){
+      this.skipWs();
+      arr.push(this.parseValue());
+      this.skipWs();
+      if(this.peek() === ','){ this.i++; continue; }
+      if(this.peek() === ']'){ this.i++; break; }
+      break;
+    }
+    return arr;
+  }
+  parseDouble(){
+    this.i++; let out='';
+    while(this.i<this.n && this.s[this.i] !== '"'){
+      if(this.s[this.i]==='\\'){ out+=this.s[this.i]+this.s[this.i+1]; this.i+=2; }
+      else { out += this.s[this.i]; this.i++; }
+    }
+    this.i++; // closing quote
+    return unescapeDoubleQuoted(out);
+  }
+  parseSingle(){
+    this.i++; let out='';
+    while(this.i<this.n){
+      if(this.s[this.i]==="'" && this.s[this.i+1]==="'"){ out+="'"; this.i+=2; continue; }
+      if(this.s[this.i]==="'") break;
+      out += this.s[this.i]; this.i++;
+    }
+    this.i++;
+    return out;
+  }
+  parseBareUntil(stopChars){
+    let out='';
+    while(this.i<this.n && !stopChars.includes(this.s[this.i])) { out += this.s[this.i]; this.i++; }
+    return out;
+  }
+  parseBareScalar(){
+    const raw = this.parseBareUntil([',','}',']']);
+    return parseScalar(raw.trim());
+  }
+}
+function parseFlow(str){ return new FlowParser(str).parseValue(); }
+
+// Split "key: value" respecting quotes/flow-brackets. Returns {key, value} or null.
+function splitKeyValue(s){
+  let depth=0, inSingle=false, inDouble=false;
+  for(let i=0;i<s.length;i++){
+    const c = s[i];
+    if(inSingle){ if(c==="'"){ if(s[i+1]==="'"){i++; continue;} inSingle=false; } continue; }
+    if(inDouble){ if(c==='\\'){ i++; continue; } if(c==='"') inDouble=false; continue; }
+    if(c==="'"){ inSingle=true; continue; }
+    if(c==='"'){ inDouble=true; continue; }
+    if(c==='{'||c==='[') depth++;
+    if(c==='}'||c===']') depth--;
+    if(depth===0 && c===':' && (i+1===s.length || /[ \t]/.test(s[i+1]))){
+      return { key: s.slice(0,i), value: s.slice(i+1) };
+    }
+  }
+  // handle "key:" with nothing after (end of string, colon at very end)
+  if(depth===0 && s.endsWith(':') && !s.slice(0,-1).includes('#')){
+    return { key: s.slice(0,-1), value: '' };
+  }
+  return null;
+}
+
+/* --------------------------- Main YAML parser --------------------------- */
+class YamlParser{
+  constructor(text){
+    this.lines = text.replace(/\r\n?/g,'\n').split('\n');
+    this.n = this.lines.length;
+    this.pos = 0;
+    this.anchors = {};
+    // Strip a single leading "---" document-start marker (and any blank/comment
+    // lines before it) so it isn't later confused with an end-of-document
+    // boundary. Only the very first non-blank line is eligible.
+    for(let i=0;i<this.n;i++){
+      const t = this.lines[i].trim();
+      if(t === '' || t[0] === '#') continue;
+      if(t === '---') this.lines[i] = '';
+      break;
+    }
+  }
+
+  // Look ahead to next meaningful (non-blank, non-comment) line without
+  // consuming it. Treats a "---" or "..." document boundary as a hard stop
+  // (returns null) so that content belonging to a later document is never
+  // folded into the current one. Returns {indent, raw, content, lineNo} or null.
+  peekMeaningful(){
+    let idx = this.pos;
+    while(idx < this.n){
+      const raw = this.lines[idx];
+      const trimmed = raw.trim();
+      if(trimmed === '' || trimmed[0] === '#'){ idx++; continue; }
+      if(trimmed === '---' || trimmed === '...'){ return null; }
+      const indent = raw.match(/^[ \t]*/)[0].length;
+      return { indent, raw, content: raw.slice(indent), lineNo: idx };
+    }
+    return null;
+  }
+
+  // Scans ahead ignoring the document-boundary hard-stop above — used only to
+  // classify what remains after the document has finished parsing (either a
+  // legitimate "---"/"..." boundary, or unexpected leftover content/garbage).
+  scanLeftoverRaw(){
+    let idx = this.pos;
+    while(idx < this.n){
+      const raw = this.lines[idx];
+      const trimmed = raw.trim();
+      if(trimmed === '' || trimmed[0] === '#'){ idx++; continue; }
+      return { raw, trimmed, lineNo: idx };
+    }
+    return null;
+  }
+
+  parseDocument(){
+    const first = this.peekMeaningful();
+    if(!first) return null;
+    return this.parseNode(first.indent);
+  }
+
+  parseNode(indent){
+    const line = this.peekMeaningful();
+    if(!line || line.indent < indent) return null;
+    if(line.content === '-' || line.content.startsWith('- ')){
+      return this.parseSequence(line.indent);
+    }
+    return this.parseMapping(line.indent);
+  }
+
+  parseSequence(indent){
+    const arr = [];
+    while(true){
+      const line = this.peekMeaningful();
+      if(!line || line.indent !== indent) break;
+      if(!(line.content === '-' || line.content.startsWith('- '))) break;
+      this.pos = line.lineNo + 1;
+      let rest = line.content === '-' ? '' : line.content.slice(2);
+      const consumedDash = line.content.length - rest.length; // e.g. 2 for "- "
+      if(rest.trim() === ''){
+        const next = this.peekMeaningful();
+        if(next && next.indent > indent){ arr.push(this.parseNode(next.indent)); }
+        else arr.push(null);
+      } else if(rest.trim().startsWith('- ') || rest.trim() === '-'){
+        // nested sequence inline: "- - a"
+        this.pos = line.lineNo; // rewind, re-treat as nested at deeper indent
+        const nestedIndent = indent + consumedDash;
+        this.lines[line.lineNo] = ' '.repeat(nestedIndent) + rest;
+        arr.push(this.parseNode(nestedIndent));
+      } else {
+        const itemIndent = indent + consumedDash;
+        const kv = splitKeyValue(rest);
+        if(kv){
+          // Sequence item is an inline mapping shorthand: "- key: value" with
+          // possible sibling keys indented to align with "key" on following lines.
+          const obj = {};
+          const key = parseKeyToken(kv.key);
+          if(kv.value.trim() === ''){
+            const next = this.peekMeaningful();
+            if(next && next.indent > itemIndent){ obj[key] = this.parseNode(next.indent); }
+            else obj[key] = null;
+          } else {
+            obj[key] = this.parseInlineValue(kv.value, itemIndent, line.lineNo);
+          }
+          arr.push(this.parseMappingBody(itemIndent, obj));
+        } else {
+          arr.push(this.parseInlineValue(rest, itemIndent, line.lineNo));
+        }
+      }
+    }
+    return arr;
+  }
+
+  parseMapping(indent){
+    return this.parseMappingBody(indent, {});
+  }
+
+  parseMappingBody(indent, obj){
+    while(true){
+      const line = this.peekMeaningful();
+      if(!line || line.indent !== indent) break;
+      if(line.content === '-' || line.content.startsWith('- ')) break;
+      const kv = splitKeyValue(line.content);
+      if(!kv) throw new YamlError('Expected "key: value" but found: "'+line.content+'"', line.lineNo+1);
+      this.pos = line.lineNo + 1;
+      const key = parseKeyToken(kv.key);
+      if(kv.value.trim() === ''){
+        const next = this.peekMeaningful();
+        if(next && next.indent > indent){ obj[key] = this.parseNode(next.indent); }
+        else obj[key] = null;
+      } else {
+        obj[key] = this.parseInlineValue(kv.value, indent, line.lineNo);
+      }
+    }
+    return obj;
+  }
+
+  // Handles: block scalars (| >), anchors (&x), aliases (*x), flow {}/[], plain scalars.
+  parseInlineValue(rest, indent, lineNo){
+    let s = rest.trim();
+    let anchorName = null;
+    const anchorMatch = s.match(/^&(\S+)\s*(.*)$/);
+    if(anchorMatch){ anchorName = anchorMatch[1]; s = anchorMatch[2].trim(); }
+    if(s === ''){
+      const next = this.peekMeaningful();
+      if(next && next.indent > indent){
+        const val = this.parseNode(next.indent);
+        if(anchorName) this.anchors[anchorName] = val;
+        return val;
+      }
+      return null;
+    }
+    const aliasMatch = s.match(/^\*(\S+)$/);
+    if(aliasMatch){
+      if(!(aliasMatch[1] in this.anchors)) throw new YamlError('Unknown anchor alias: *'+aliasMatch[1], lineNo+1);
+      return this.anchors[aliasMatch[1]];
+    }
+    if(s[0] === '|' || s[0] === '>'){
+      const val = this.parseBlockScalar(s, indent);
+      if(anchorName) this.anchors[anchorName] = val;
+      return val;
+    }
+    if(s[0] === '{' || s[0] === '['){
+      let val;
+      try{ val = parseFlow(stripTrailingComment(s)); }
+      catch(e){ throw new YamlError('Malformed flow collection: '+e.message, lineNo+1); }
+      if(anchorName) this.anchors[anchorName] = val;
+      return val;
+    }
+    const val = parseScalar(stripTrailingComment(s));
+    if(anchorName) this.anchors[anchorName] = val;
+    return val;
+  }
+
+  parseBlockScalar(indicator, parentIndent){
+    const type = indicator[0]; // | or >
+    const chomp = indicator.includes('-') ? 'strip' : indicator.includes('+') ? 'keep' : 'clip';
+    const collected = [];
+    let blockIndent = null;
+    while(this.pos < this.n){
+      const raw = this.lines[this.pos];
+      if(raw.trim() === ''){ collected.push(''); this.pos++; continue; }
+      const ind = raw.match(/^[ \t]*/)[0].length;
+      if(ind <= parentIndent) break;
+      if(blockIndent === null) blockIndent = ind;
+      collected.push(raw.slice(Math.min(blockIndent, raw.length)));
+      this.pos++;
+    }
+    while(collected.length && collected[collected.length-1] === '' && chomp !== 'keep'){
+      collected.pop();
+    }
+    let text;
+    if(type === '|'){
+      text = collected.join('\n');
+    } else {
+      // folded style: consecutive non-blank lines join with a space; blank lines become \n
+      let out = ''; let prevBlank = true;
+      for(let i=0;i<collected.length;i++){
+        const l = collected[i];
+        if(l === ''){ out += '\n'; prevBlank = true; }
+        else { out += (prevBlank ? '' : ' ') + l; prevBlank = false; }
+      }
+      text = out;
+    }
+    if(chomp !== 'strip') text += '\n';
+    return text;
+  }
+}
+
+function parseYAML(text){
+  if(text.trim() === '') return null;
+  const parser = new YamlParser(text);
+  const result = parser.parseDocument();
+  // Detect trailing/unexpected content that the recursive parser could not
+  // attach anywhere (usually a sign of inconsistent indentation or a typo).
+  const leftover = parser.scanLeftoverRaw();
+  if(leftover){
+    if(leftover.trimmed !== '---' && leftover.trimmed !== '...'){
+      throw new YamlError(
+        'Unexpected content or bad indentation near: "' + leftover.trimmed.slice(0,60) + '"',
+        leftover.lineNo + 1
+      );
+    }
+    // Otherwise: a "---"/"..." document separator was found — this is valid
+    // multi-document YAML. This app parses and displays only the first document.
+  }
+  return result;
+}
+
+/* ============================================================================
+   SERIALIZER — turns a parsed JS value back into clean, well-formatted YAML.
+   ============================================================================ */
+
+const PLAIN_SAFE = /^[A-Za-z0-9 _\-.\/@]+$/; // conservative: safe to leave unquoted
+const RESERVED_WORDS = new Set(['true','false','yes','no','on','off','null','~','']);
+
+function needsQuoting(str, forceQuote){
+  if(forceQuote) return true;
+  if(str === '') return true;
+  if(RESERVED_WORDS.has(str.toLowerCase())) return true;
+  if(/^[-+]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?$/.test(str)) return true; // looks numeric
+  if(/^[\[\]{}&*!|>'"%@`,#]/.test(str)) return true; // leading special char
+  if(/^[ \t]|[ \t]$/.test(str)) return true; // leading/trailing whitespace
+  if(/: |:$|#/.test(str)) return true; // contains ": " or trailing colon or comment marker
+  if(/[\n\t]/.test(str)) return true;
+  if(str.includes(': ') ) return true;
+  if(!PLAIN_SAFE.test(str)) return true;
+  return false;
+}
+
+function quoteString(str){
+  // prefer single quotes unless the string contains characters needing escapes
+  if(/[\n\\]/.test(str) === false && /"/.test(str) === false){
+    return "'" + str.replace(/'/g,"''") + "'";
+  }
+  const esc = str.replace(/\\/g,'\\\\').replace(/"/g,'\\"').replace(/\n/g,'\\n').replace(/\t/g,'\\t');
+  return '"' + esc + '"';
+}
+
+function scalarToYaml(val, opts){
+  if(val === null || val === undefined) return 'null';
+  if(typeof val === 'boolean') return val ? 'true' : 'false';
+  if(typeof val === 'number'){
+    if(Number.isNaN(val)) return '.nan';
+    if(val === Infinity) return '.inf';
+    if(val === -Infinity) return '-.inf';
+    return String(val);
+  }
+  if(typeof val === 'string'){
+    if(val.includes('\n')){
+      // use block literal style for multi-line strings
+      const indentStr = ' '.repeat(opts.indentSize);
+      const lines = val.replace(/\n$/,'').split('\n').map(l => indentStr + l).join('\n');
+      return '|\n' + lines;
+    }
+    if(needsQuoting(val, opts.quoteStrings)) return quoteString(val);
+    return val;
+  }
+  return String(val);
+}
+
+function isPlainObject(v){ return v !== null && typeof v === 'object' && !Array.isArray(v); }
+
+function sortObjKeys(obj){
+  const out = {};
+  Object.keys(obj).sort((a,b)=>a.localeCompare(b)).forEach(k => out[k] = obj[k]);
+  return out;
+}
+
+function toYAML(value, opts, indentLevel){
+  opts = opts || {};
+  const indentSize = opts.indentSize || 2;
+  opts.indentSize = indentSize;
+  indentLevel = indentLevel || 0;
+  const pad = ' '.repeat(indentLevel * indentSize);
+
+  if(value === null || value === undefined) return 'null\n';
+  if(Array.isArray(value)){
+    if(value.length === 0) return '[]\n';
+    if(opts.flowArrays && value.every(v => v===null || typeof v!=='object')){
+      const items = value.map(v => scalarToYaml(v, opts)).join(', ');
+      return '[' + items + ']\n';
+    }
+    let out = '';
+    for(const item of value){
+      if(isPlainObject(item) || Array.isArray(item)){
+        const nested = toYAML(item, opts, 0);
+        const nestedLines = nested.trimEnd().split('\n');
+        out += pad + '- ' + nestedLines[0] + '\n';
+        for(let i=1;i<nestedLines.length;i++){
+          out += pad + '  ' + nestedLines[i] + '\n';
+        }
+      } else {
+        out += pad + '- ' + scalarToYaml(item, opts) + '\n';
+      }
+    }
+    return out;
+  }
+  if(isPlainObject(value)){
+    const keys = Object.keys(value);
+    if(keys.length === 0) return '{}\n';
+    const obj = opts.sortKeys ? sortObjKeys(value) : value;
+    let out = '';
+    for(const key of Object.keys(obj)){
+      const v = obj[key];
+      const keyStr = needsQuoting(String(key), false) && !/^[A-Za-z_][\w-]*$/.test(String(key)) ? quoteString(String(key)) : key;
+      if(isPlainObject(v) && Object.keys(v).length){
+        out += pad + keyStr + ':\n' + toYAML(v, opts, indentLevel+1);
+      } else if(Array.isArray(v) && v.length && !(opts.flowArrays && v.every(x=>x===null||typeof x!=='object'))){
+        out += pad + keyStr + ':\n' + toYAML(v, opts, indentLevel+1);
+      } else {
+        const scalarOut = toYAML(v, opts, indentLevel+1);
+        if(typeof v === 'string' && v.includes('\n')){
+          out += pad + keyStr + ': ' + scalarOut;
+        } else {
+          out += pad + keyStr + ': ' + scalarOut;
+        }
+      }
+    }
+    return out;
+  }
+  return scalarToYaml(value, opts) + '\n';
+}
+
+function beautifyYAML(value, options){
+  if(value === null || value === undefined) return 'null\n';
+  const raw = toYAML(value, options, 0);
+  return raw.trimEnd() + '\n';
+}
+
+/* ============================================================================
+   SYNTAX HIGHLIGHTING (display only — operates on generated/known-good text)
+   ============================================================================ */
+function escapeHtml(s){
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function highlightScalarToken(v){
+  const t = v.trim();
+  if(t === '') return '';
+  if(/^[|>][+-]?\d*$/.test(t)) return '<span class="y-dash">'+escapeHtml(t)+'</span>';
+  if(t[0] === "'" || t[0] === '"') return '<span class="y-str">'+escapeHtml(t)+'</span>';
+  if(/^(true|false)$/i.test(t)) return '<span class="y-bool">'+escapeHtml(t)+'</span>';
+  if(/^(null|~)$/i.test(t)) return '<span class="y-null">'+escapeHtml(t)+'</span>';
+  if(/^-?\d+\.?\d*([eE][+-]?\d+)?$/.test(t)) return '<span class="y-num">'+escapeHtml(t)+'</span>';
+  if(t[0] === '&' || t[0] === '*') return '<span class="y-anchor">'+escapeHtml(t)+'</span>';
+  if(t[0] === '[' || t[0] === '{') return '<span class="y-str">'+escapeHtml(t)+'</span>';
+  return '<span class="y-str">'+escapeHtml(t)+'</span>';
+}
+
+function highlightYAMLLine(line){
+  const indentMatch = line.match(/^[ \t]*/)[0];
+  let rest = line.slice(indentMatch.length);
+  let html = escapeHtml(indentMatch);
+  if(rest.trim() === '') return html;
+  if(rest.trim().startsWith('#')) return html + '<span class="y-com">'+escapeHtml(rest)+'</span>';
+  while(rest.startsWith('- ')){
+    html += '<span class="y-dash">- </span>';
+    rest = rest.slice(2);
+  }
+  if(rest === '-'){ return html + '<span class="y-dash">-</span>'; }
+  const kv = splitKeyValue(rest);
+  if(kv && kv.key.trim() !== ''){
+    html += '<span class="y-key">'+escapeHtml(kv.key.trim())+'</span><span>:</span>';
+    if(kv.value.trim() !== '') html += ' ' + highlightScalarToken(kv.value);
+    return html;
+  }
+  return html + highlightScalarToken(rest);
+}
+
+function highlightYAML(text){
+  return text.split('\n').map(highlightYAMLLine).join('\n');
+}
+
+function highlightJSON(jsonStr){
+  const escaped = escapeHtml(jsonStr);
+  return escaped.replace(
+    /("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false)\b|\bnull\b|-?\d+\.?\d*([eE][+-]?\d+)?)/g,
+    function(match){
+      let cls = 'y-num';
+      if(/^"/.test(match)) cls = /:$/.test(match) ? 'y-key' : 'y-str';
+      else if(/true|false/.test(match)) cls = 'y-bool';
+      else if(/null/.test(match)) cls = 'y-null';
+      return '<span class="'+cls+'">'+match+'</span>';
+    }
+  );
+}
+
+/* ============================================================================
+   TREE VIEW RENDERER — interactive, collapsible, searchable
+   ============================================================================ */
+function scalarSpan(value){
+  const span = document.createElement('span');
+  if(value === null || value === undefined){ span.className = 'tval-null'; span.textContent = 'null'; }
+  else if(typeof value === 'boolean'){ span.className = 'tval-bool'; span.textContent = String(value); }
+  else if(typeof value === 'number'){ span.className = 'tval-num'; span.textContent = String(value); }
+  else { span.className = 'tval-str'; span.textContent = String(value); }
+  return span;
+}
+
+function buildTreeNode(key, value, isIndex, isTop){
+  const wrap = document.createElement('div');
+  wrap.className = 'tnode' + (isTop ? ' root' : '');
+  const row = document.createElement('div');
+  row.className = 'trow';
+  const isContainer = (Array.isArray(value) && value.length) || (isPlainObject(value) && Object.keys(value).length);
+
+  const caret = document.createElement('span');
+  caret.className = 'tcaret' + (isContainer ? '' : ' leaf');
+  caret.textContent = isContainer ? '▾' : '';
+  row.appendChild(caret);
+
+  if(key !== null){
+    const keySpan = document.createElement('span');
+    keySpan.className = 'tkey';
+    keySpan.textContent = isIndex ? '['+key+']' : key;
+    row.appendChild(keySpan);
+    if(!isIndex){
+      const colon = document.createElement('span');
+      colon.className = 'tcolon';
+      colon.textContent = ':';
+      row.appendChild(colon);
+    }
+  }
+
+  if(!isContainer){
+    row.appendChild(document.createTextNode(' '));
+    row.appendChild(scalarSpan(value));
+  } else {
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'ttype';
+    const count = Array.isArray(value) ? value.length : Object.keys(value).length;
+    typeSpan.textContent = Array.isArray(value)
+      ? `[${count} item${count!==1?'s':''}]`
+      : `{${count} key${count!==1?'s':''}}`;
+    row.appendChild(typeSpan);
+  }
+  wrap.appendChild(row);
+
+  if(isContainer){
+    const childrenWrap = document.createElement('div');
+    childrenWrap.className = 'tchildren';
+    if(Array.isArray(value)){
+      value.forEach((v,i) => childrenWrap.appendChild(buildTreeNode(String(i), v, true, false)));
+    } else {
+      Object.keys(value).forEach(k => childrenWrap.appendChild(buildTreeNode(k, value[k], false, false)));
+    }
+    wrap.appendChild(childrenWrap);
+    caret.addEventListener('click', () => {
+      childrenWrap.classList.toggle('collapsed');
+      caret.textContent = childrenWrap.classList.contains('collapsed') ? '▸' : '▾';
+    });
+  }
+  return wrap;
+}
+
+function renderTree(container, value){
+  container.innerHTML = '';
+  if(value === null || value === undefined){
+    container.innerHTML = '<div class="trow"><span class="tcaret leaf"></span><span class="tval-null">null (empty document)</span></div>';
+    return;
+  }
+  if(Array.isArray(value)){
+    if(value.length === 0){ container.innerHTML = '<div class="trow"><span class="ttype">[] empty sequence</span></div>'; return; }
+    value.forEach((v,i) => container.appendChild(buildTreeNode(String(i), v, true, true)));
+  } else if(isPlainObject(value)){
+    const keys = Object.keys(value);
+    if(keys.length === 0){ container.innerHTML = '<div class="trow"><span class="ttype">{} empty mapping</span></div>'; return; }
+    keys.forEach(k => container.appendChild(buildTreeNode(k, value[k], false, true)));
+  } else {
+    container.appendChild(buildTreeNode(null, value, false, true));
+  }
+}
+
+function setAllCollapsed(container, collapsed){
+  container.querySelectorAll('.tchildren').forEach(ch => {
+    ch.classList.toggle('collapsed', collapsed);
+    const row = ch.previousElementSibling;
+    if(row){ const caret = row.querySelector('.tcaret'); if(caret && !caret.classList.contains('leaf')) caret.textContent = collapsed ? '▸' : '▾'; }
+  });
+}
+
+function expandAncestors(row){
+  let wrap = row.parentElement;
+  let parent = wrap ? wrap.parentElement : null;
+  while(parent && parent.classList && parent.classList.contains('tchildren')){
+    parent.classList.remove('collapsed');
+    const parentRow = parent.previousElementSibling;
+    if(parentRow){ const caret = parentRow.querySelector('.tcaret'); if(caret) caret.textContent = '▾'; }
+    wrap = parent.parentElement;
+    parent = wrap ? wrap.parentElement : null;
+  }
+}
+
+function applyTreeSearch(container, term){
+  container.querySelectorAll('.thighlight').forEach(el => el.classList.remove('thighlight'));
+  const t = term.trim().toLowerCase();
+  if(!t) return;
+  let first = null;
+  container.querySelectorAll('.trow').forEach(row => {
+    if(row.textContent.toLowerCase().includes(t)){
+      row.classList.add('thighlight');
+      expandAncestors(row);
+      if(!first) first = row;
+    }
+  });
+  if(first) first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+/* ============================================================================
+   STATS
+   ============================================================================ */
+function computeStats(value, sourceText){
+  let keyCount = 0, seqItems = 0, maxDepth = 0, scalarCount = 0, mapCount = 0, seqCount = 0;
+  function walk(v, depth){
+    maxDepth = Math.max(maxDepth, depth);
+    if(Array.isArray(v)){
+      seqCount++;
+      seqItems += v.length;
+      v.forEach(x => walk(x, depth+1));
+    } else if(isPlainObject(v)){
+      mapCount++;
+      const ks = Object.keys(v);
+      keyCount += ks.length;
+      ks.forEach(k => walk(v[k], depth+1));
+    } else {
+      scalarCount++;
+    }
+  }
+  walk(value, 0);
+  const lines = sourceText.split('\n').length;
+  const bytes = new Blob([sourceText]).size;
+  return { keyCount, seqItems, maxDepth, scalarCount, mapCount, seqCount, lines, bytes };
+}
+
+/* ============================================================================
+   SAMPLE DOCUMENT
+   ============================================================================ */
+const SAMPLE_YAML = `# YAML Studio sample document
+# Demonstrates mappings, sequences, flow style, anchors, and block scalars.
+
+app:
+  name: YAML Studio
+  version: 1.4.2
+  debug: false
+  rating: 4.8
+
+server:
+  host: 127.0.0.1
+  port: 8080
+  tags: [local, dev, "beta feature"]
+
+database:
+  primary: &db_defaults
+    driver: postgres
+    pool_size: 10
+    timeout_ms: 3000
+  replica:
+    <<: *db_defaults
+    host: replica.internal
+
+features:
+  - name: dark_mode
+    enabled: true
+  - name: notifications
+    enabled: false
+    channels: [email, sms]
+  - name: export
+    enabled: true
+
+description: |
+  This is a literal block scalar.
+  Line breaks are preserved exactly
+  as written across multiple lines.
+
+changelog: >
+  This is a folded block scalar where
+  single newlines become spaces, but
+  blank lines still create a paragraph break.
+
+owner: null
+contact: "team@example.com"
+`;
+
+/* ============================================================================
+   APP STATE + UI WIRING
+   ============================================================================ */
+(function(){
+  const srcInput   = document.getElementById('srcInput');
+  const gutter     = document.getElementById('gutter');
+  const srcStatus  = document.getElementById('srcStatus');
+  const dropZone   = document.getElementById('dropZone');
+  const fileInput  = document.getElementById('fileInput');
+  const validationBadge = document.getElementById('validationBadge');
+
+  const viewTree       = document.getElementById('view-tree');
+  const viewBeautified = document.getElementById('view-beautified');
+  const viewJson       = document.getElementById('view-json');
+  const viewStats      = document.getElementById('view-stats');
+
+  const optIndent  = document.getElementById('optIndent');
+  const optSort    = document.getElementById('optSortKeys');
+  const optQuote   = document.getElementById('optQuoteStrings');
+  const optFlow    = document.getElementById('optFlowArrays');
+  const treeSearch = document.getElementById('treeSearch');
+
+  let parsedValue = null;
+  let lastGoodBeautified = '';
+  let lastGoodJson = '';
+  let currentTab = 'tree';
+
+  function updateGutter(){
+    const count = srcInput.value.split('\n').length;
+    let out = '';
+    for(let i=1;i<=count;i++) out += i + '\n';
+    gutter.textContent = out;
+    gutter.scrollTop = srcInput.scrollTop;
+  }
+  srcInput.addEventListener('scroll', () => { gutter.scrollTop = srcInput.scrollTop; });
+  srcInput.addEventListener('input', () => { updateGutter(); scheduleParse(); });
+
+  function getOptions(){
+    return {
+      indentSize: optIndent.value === 'tab' ? 2 : parseInt(optIndent.value,10),
+      useTab: optIndent.value === 'tab',
+      sortKeys: optSort.checked,
+      quoteStrings: optQuote.checked,
+      flowArrays: optFlow.checked
+    };
+  }
+
+  function tabsToSpaces(text, opts){
+    if(!opts.useTab) return text;
+    // convert leading 2-space indents into tabs for display (approximation)
+    return text.split('\n').map(line => {
+      const m = line.match(/^( +)/);
+      if(!m) return line;
+      const spaces = m[1].length;
+      const tabs = '\t'.repeat(Math.floor(spaces/2));
+      return tabs + line.slice(spaces);
+    }).join('\n');
+  }
+
+  let parseTimer = null;
+  function scheduleParse(){
+    clearTimeout(parseTimer);
+    parseTimer = setTimeout(runParse, 250);
+  }
+
+  function runParse(){
+    const text = srcInput.value;
+    if(text.trim() === ''){
+      parsedValue = null;
+      srcStatus.className = 'statusbar';
+      srcStatus.textContent = 'Ready. Load a file or paste YAML to begin.';
+      validationBadge.className = 'badge';
+      validationBadge.textContent = '—';
+      clearOutputs();
+      return;
+    }
+    try{
+      parsedValue = parseYAML(text);
+      srcStatus.className = 'statusbar ok';
+      srcStatus.textContent = '✓ Parsed successfully — ' + text.split('\n').length + ' lines.';
+      validationBadge.className = 'badge ok';
+      validationBadge.textContent = '✓ Valid YAML';
+      renderAll();
+    } catch(err){
+      parsedValue = null;
+      const lineInfo = (err instanceof YamlError && err.line) ? ' (line ' + err.line + ')' : '';
+      srcStatus.className = 'statusbar err';
+      srcStatus.textContent = '✕ ' + err.message + lineInfo;
+      validationBadge.className = 'badge err';
+      validationBadge.textContent = '✕ Invalid YAML';
+      renderError(err);
+    }
+  }
+
+  function clearOutputs(){
+    viewTree.innerHTML = '<div class="trow"><span class="ttype" style="margin-left:0">Nothing to show yet.</span></div>';
+    viewBeautified.innerHTML = '<pre style="color:var(--muted)">Nothing to show yet.</pre>';
+    viewJson.innerHTML = '<pre style="color:var(--muted)">Nothing to show yet.</pre>';
+    viewStats.innerHTML = '<p style="color:var(--muted)">Nothing to show yet.</p>';
+    lastGoodBeautified = ''; lastGoodJson = '';
+  }
+
+  function renderError(err){
+    const lineInfo = (err instanceof YamlError && err.line) ? err.line : null;
+    viewStats.innerHTML = `
+      <h3 style="margin-top:0;">Validation failed</h3>
+      <ul class="err-list">
+        <li><b>${escapeHtml(err.message)}</b>${lineInfo ? ' — near line ' + lineInfo : ''}</li>
+      </ul>
+      <p style="color:var(--muted); font-size:12.5px;">Fix the issue above in the source panel; output views will refresh automatically once the document parses.</p>`;
+    switchTab('stats');
+  }
+
+  function renderAll(){
+    const opts = getOptions();
+    // Tree
+    renderTree(viewTree, parsedValue);
+
+    // Beautified YAML
+    const beautified = beautifyYAML(parsedValue, opts);
+    lastGoodBeautified = tabsToSpaces(beautified, opts);
+    viewBeautified.innerHTML = '<pre>' + highlightYAML(lastGoodBeautified) + '</pre>';
+
+    // JSON
+    lastGoodJson = JSON.stringify(parsedValue, null, opts.useTab ? '\t' : opts.indentSize);
+    viewJson.innerHTML = '<pre>' + highlightJSON(lastGoodJson) + '</pre>';
+
+    // Stats
+    const s = computeStats(parsedValue, srcInput.value);
+    viewStats.innerHTML = `
+      <div class="stat-grid">
+        <div class="stat-card"><div class="stat-num">${s.lines}</div><div class="stat-label">Source lines</div></div>
+        <div class="stat-card"><div class="stat-num">${s.bytes}</div><div class="stat-label">Bytes</div></div>
+        <div class="stat-card"><div class="stat-num">${s.keyCount}</div><div class="stat-label">Mapping keys</div></div>
+        <div class="stat-card"><div class="stat-num">${s.seqItems}</div><div class="stat-label">Sequence items</div></div>
+        <div class="stat-card"><div class="stat-num">${s.mapCount}</div><div class="stat-label">Mapping blocks</div></div>
+        <div class="stat-card"><div class="stat-num">${s.seqCount}</div><div class="stat-label">Sequence blocks</div></div>
+        <div class="stat-card"><div class="stat-num">${s.scalarCount}</div><div class="stat-label">Scalar values</div></div>
+        <div class="stat-card"><div class="stat-num">${s.maxDepth}</div><div class="stat-label">Max nesting depth</div></div>
+      </div>
+      <p style="color:var(--ok);">✓ Document is well-formed YAML.</p>`;
+  }
+
+  /* ---- Tabs ---- */
+  function switchTab(name){
+    currentTab = name;
+    document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === name));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === 'view-' + name));
+    document.getElementById('optionsBar').style.display = (name === 'beautified' || name === 'json' || name === 'tree') ? 'flex' : 'none';
+    treeSearch.style.display = name === 'tree' ? 'inline-block' : 'none';
+    document.getElementById('btnExpandAll').style.display = name === 'tree' ? 'inline-flex' : 'none';
+    document.getElementById('btnCollapseAll').style.display = name === 'tree' ? 'inline-flex' : 'none';
+    optIndent.parentElement.style.display = name === 'tree' ? 'none' : 'flex';
+    optSort.parentElement.style.display = name === 'tree' ? 'none' : 'flex';
+    optQuote.parentElement.style.display = name === 'tree' ? 'none' : 'flex';
+    optFlow.parentElement.style.display = name === 'tree' ? 'none' : 'flex';
+  }
+  document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => switchTab(t.dataset.tab)));
+
+  /* ---- Options re-render on change ---- */
+  [optIndent, optSort, optQuote, optFlow].forEach(el => el.addEventListener('change', () => { if(parsedValue !== null) renderAll(); }));
+
+  /* ---- Tree controls ---- */
+  document.getElementById('btnExpandAll').addEventListener('click', () => setAllCollapsed(viewTree, false));
+  document.getElementById('btnCollapseAll').addEventListener('click', () => setAllCollapsed(viewTree, true));
+  treeSearch.addEventListener('input', () => applyTreeSearch(viewTree, treeSearch.value));
+
+  /* ---- File loading ---- */
+  function loadFileText(text, name){
+    srcInput.value = text;
+    updateGutter();
+    runParse();
+    srcStatus.textContent = (name ? 'Loaded "' + name + '". ' : '') + srcStatus.textContent;
+  }
+  function handleFiles(files){
+    if(!files || !files.length) return;
+    const file = files[0];
+    const reader = new FileReader();
+    reader.onload = e => loadFileText(e.target.result, file.name);
+    reader.onerror = () => { srcStatus.className = 'statusbar err'; srcStatus.textContent = '✕ Could not read file.'; };
+    reader.readAsText(file);
+  }
+  document.getElementById('btnOpenFile').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', e => handleFiles(e.target.files));
+  dropZone.addEventListener('click', () => fileInput.click());
+  ['dragenter','dragover'].forEach(evt => dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('dragover'); }));
+  ['dragleave','drop'].forEach(evt => dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('dragover'); }));
+  dropZone.addEventListener('drop', e => handleFiles(e.dataTransfer.files));
+  // Also allow dropping anywhere on the editor
+  srcInput.addEventListener('dragover', e => e.preventDefault());
+  srcInput.addEventListener('drop', e => { e.preventDefault(); handleFiles(e.dataTransfer.files); });
+
+  document.getElementById('btnSample').addEventListener('click', () => loadFileText(SAMPLE_YAML, 'sample.yaml'));
+  document.getElementById('btnClear').addEventListener('click', () => { srcInput.value=''; updateGutter(); runParse(); srcInput.focus(); });
+
+  /* ---- Copy / download ---- */
+  function currentOutputText(){
+    if(currentTab === 'json') return lastGoodJson;
+    return lastGoodBeautified;
+  }
+  document.getElementById('btnCopy').addEventListener('click', async () => {
+    const text = currentOutputText();
+    if(!text){ flashBadge('Nothing to copy yet', false); return; }
+    try{ await navigator.clipboard.writeText(text); flashBadge('Copied to clipboard ✓', true); }
+    catch(e){ flashBadge('Copy failed — select & copy manually', false); }
+  });
+  function flashBadge(msg, ok){
+    const prev = validationBadge.textContent, prevClass = validationBadge.className;
+    validationBadge.textContent = msg;
+    validationBadge.className = 'badge ' + (ok ? 'ok' : 'err');
+    setTimeout(() => { validationBadge.textContent = prev; validationBadge.className = prevClass; }, 1800);
+  }
+  function download(filename, text){
+    const blob = new Blob([text], {type:'text/plain'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+  document.getElementById('btnDownloadYaml').addEventListener('click', () => {
+    if(!lastGoodBeautified){ flashBadge('Nothing to download yet', false); return; }
+    download('formatted.yaml', lastGoodBeautified);
+  });
+  document.getElementById('btnDownloadJson').addEventListener('click', () => {
+    if(!lastGoodJson){ flashBadge('Nothing to download yet', false); return; }
+    download('converted.json', lastGoodJson);
+  });
+
+  /* ---- Theme toggle ---- */
+  document.getElementById('themeBtn').addEventListener('click', () => {
+    const root = document.documentElement;
+    const cur = root.getAttribute('data-theme');
+    root.setAttribute('data-theme', cur === 'light' ? 'dark' : 'light');
+  });
+
+  /* ---- Init ---- */
+  updateGutter();
+  clearOutputs();
+  switchTab('tree');
+  loadFileText(SAMPLE_YAML, 'sample.yaml');
+})();
+</script>
+</body>
+</html>
